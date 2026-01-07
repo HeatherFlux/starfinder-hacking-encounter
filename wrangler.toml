@@ -1,0 +1,21 @@
+name = "pathfinder-encounters-worker"
+main = "src/index.ts"
+compatibility_date = "2025-12-28"
+
+# Durable Object for real-time hacking session sync
+[[durable_objects.bindings]]
+name = "HACKING_SESSIONS"
+class_name = "HackingSession"
+
+# Migration to create the Durable Object class
+[[migrations]]
+tag = "v1"
+new_classes = ["HackingSession"]
+
+# ============== Security Settings ==============
+[vars]
+ALLOWED_ORIGINS = "https://starfinderencounters.com,https://www.starfinderencounters.com,https://damoritoshs-arena.pages.dev,http://localhost:5173"
+
+# Optional: Require a secret to connect as GM
+# GM_SECRET = "your-secret-here"
+# (Better: use `wrangler secret put GM_SECRET` for production)

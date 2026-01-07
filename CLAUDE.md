@@ -4,72 +4,55 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Starfinder Hacking Encounter is a Vue 3 + TypeScript + Vite web application for running Starfinder 2e hacking encounters. It provides a GM interface to control computer system network visualizations and a player view for projection. The app is designed for future integration into a larger Starfinder Encounter Builder application (see INTEGRATION_PLAN.md).
+Cloudflare Worker providing real-time WebSocket synchronization for "Damoritosh's Arena" - a Pathfinder 2e hacking encounter system. GMs and players connect to synchronized sessions where computer hacking state is shared in real-time.
 
 ## Commands
 
 ```bash
-npm run dev      # Start Vite dev server with hot reload
-npm run build    # Type-check with vue-tsc, then build for production
-npm run preview  # Preview production build locally
+npm run dev      # Local development server (wrangler dev)
+npm run deploy   # Deploy to Cloudflare Workers production
+npm run tail     # Stream logs from deployed worker
+npm run test     # Run tests in watch mode (vitest)
+npm run test:run # Run tests once
 ```
+
+TypeScript compilation is handled automatically by Wrangler during dev/deploy.
 
 ## Architecture
 
-### Routing
-- Hash-based routing via vue-router
-- `/#/gm` - GM control interface (default)
-- `/#/player` - Player-facing visualization
-- `/#/player?state=<encoded>` - Share URL with embedded computer config
+**Source files:**
+- `src/index.ts` - Worker entry point: HTTP routing, CORS, WebSocket upgrades to Durable Objects
+- `src/HackingSession.ts` - Durable Object: manages WebSocket connections, state persistence, and message broadcasting
+- `src/validation.ts` - Input sanitization and payload validation (XSS prevention, bounds checking)
 
-### State Management
-Single reactive store (`stores/visualizationStore.ts`) manages:
-- Computer configuration (nodes, connections, states)
-- Active visual effects
-- Saved encounters (localStorage persistence)
-- Cross-tab sync via BroadcastChannel (GM ↔ Player windows)
-- URL-based state sharing (base64-encoded in hash)
+**Request Flow:**
+1. Client connects to `/ws/:sessionId?role=gm` or `/ws/:sessionId?role=player` with WebSocket upgrade
+2. Worker routes request to `HackingSession` Durable Object by session ID
+3. Durable Object manages connection, validates messages, broadcasts state changes, persists to storage
 
-### Key Data Types
-- **Computer**: id, name, level (1-20), type (tech/magic/hybrid), array of AccessPoints
-- **AccessPoint**: id, name, type, state (locked/active/breached/alarmed), normalized position (0-1), connections
-- **Effect**: 10 types with auto-removal durations (breach, alarm, vulnerability, etc.)
+**Key Patterns:**
+- Role-based access control: only GMs can modify state, players receive broadcasts
+- All incoming payloads are validated and sanitized before processing/storage
+- State persistence via Durable Object storage with 15-minute inactivity cleanup
+- Message broadcasting excludes sender to prevent echoes
+- Alarm scheduling for deferred cleanup operations
 
-### Component Structure
-```
-components/
-├── layout/
-│   ├── GMLayout.vue       # Main GM control interface
-│   └── PlayerLayout.vue   # Player-facing fullscreen view
-├── visualization/
-│   ├── NodeNetworkCanvas.vue  # 2D Canvas network + particle system
-│   └── EffectOverlay.vue      # Effects rendering layer
-└── gm/
-    ├── ControlPanel.vue   # Effect triggers + keyboard hotkeys
-    ├── NodeList.vue       # Access point state manager
-    └── ComputerEditor.vue # Visual drag-drop node editor
+## WebSocket Message Types
+
+`init`, `computer`, `node-state`, `focus`, `intensity`, `effect`, `clear-effects`, `ping/pong`
+
+Only `effect` and `clear-effects` messages are transient (not persisted).
+
+## Key Types
+
+```typescript
+type ComputerType = 'tech' | 'magic' | 'hybrid'
+type AccessPointType = 'physical' | 'remote' | 'magical'
+type NodeState = 'locked' | 'active' | 'breached' | 'alarmed'
 ```
 
-### Visualization System
-- Canvas 2D rendering with animation frame loop
-- Normalized coordinates (0-1) for canvas-agnostic positioning
-- Particle system for data flow (adjustable intensity)
-- Color coding by node state
+## Debugging
 
-### Hotkeys (GM Control)
-- B = Breach, A = Alarm, T = Trace, S = Success
-- V = Vulnerability, C = Countermeasure, L = Lockout
-- D = Data Extract, N = Scan, P = Pulse
-
-## Theme Colors (Tetradic Palette)
-- Cyan (#1ECBE1) - Primary UI, locked nodes
-- Purple (#9600E1) - Secondary actions
-- Red (#E1341E) - Danger, alarmed states
-- Green (#6AE11E) - Success, breached states
-- Background (#050608) - Deep space
-
-## Conventions
-- Vue 3 `<script setup>` for all components
-- Normalized coordinates for canvas layouts
-- Effect-driven visualization (state changes trigger effects)
-- LocalStorage + BroadcastChannel for persistence and sync
+- `/health` or `/api/health` - Health check endpoint
+- `/ws/:sessionId/state` - GET current session state (connections, computer, focus)
+- Console logs prefixed with `[HackingSession]` for tracing
