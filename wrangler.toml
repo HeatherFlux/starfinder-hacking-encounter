@@ -1,4 +1,4 @@
-name = "pathfinder-encounters-worker"
+name = "starfinder-worker"
 main = "src/index.ts"
 compatibility_date = "2025-12-28"
 
@@ -7,10 +7,10 @@ compatibility_date = "2025-12-28"
 name = "HACKING_SESSIONS"
 class_name = "HackingSession"
 
-# Migration to create the Durable Object class
+# Migration to create the Durable Object class (SQLite required for free plan)
 [[migrations]]
-tag = "v1"
-new_classes = ["HackingSession"]
+tag = "v2"
+new_sqlite_classes = ["HackingSession"]
 
 # ============== Security Settings ==============
 [vars]
