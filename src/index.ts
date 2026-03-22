@@ -87,6 +87,37 @@ export default {
       return stub.fetch(doRequest)
     }
 
+    // Discord webhook proxy — forwards JSON body to a Discord webhook URL
+    // so the browser doesn't hit CORS restrictions
+    if (url.pathname === '/discord' && request.method === 'POST') {
+      try {
+        const { webhookUrl, ...message } = await request.json() as { webhookUrl: string; [key: string]: unknown }
+
+        if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+          return new Response(JSON.stringify({ error: 'Invalid webhook URL' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          })
+        }
+
+        const discordResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(message),
+        })
+
+        return new Response(discordResponse.body, {
+          status: discordResponse.status,
+          headers: { ...corsHeaders },
+        })
+      } catch (error) {
+        return new Response(JSON.stringify({ error: 'Failed to proxy Discord message' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
+      }
+    }
+
     // Health check endpoint
     if (url.pathname === '/health' || url.pathname === '/api/health') {
       return new Response(JSON.stringify({
